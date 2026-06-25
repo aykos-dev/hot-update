@@ -26,14 +26,12 @@ services:
       - "3000:3000"
     environment:
       PORT: 3000
-      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
       HOT_UPDATER_AUTH_TOKEN: ${HOT_UPDATER_AUTH_TOKEN:?set HOT_UPDATER_AUTH_TOKEN}
       DATABASE_URL: postgres://hotupdater:hotupdater@db:5432/hotupdater
-      DATA_DIR: /data
-    volumes:
-      # Uploaded bundles + assets (served at /files). Back this up.
-      - hot_update_data:/data
+      R2_ENDPOINT: ${R2_ENDPOINT:?set R2_ENDPOINT}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:?set R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:?set R2_SECRET_ACCESS_KEY}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:?set R2_BUCKET_NAME}
 
 volumes:
   hot_update_pgdata:
-  hot_update_data:

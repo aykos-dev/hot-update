@@ -1,3 +1,4 @@
+import { s3Storage } from "@hot-updater/aws";
 import { createHotUpdater } from "@hot-updater/server";
 import { kyselyAdapter } from "@hot-updater/server/adapters/kysely";
 import { Kysely, PostgresDialect } from "kysely";
@@ -11,16 +12,19 @@ export const kysely = new Kysely<unknown>({
   dialect: new PostgresDialect({ pool }),
 });
 
-// The official Hot Updater server: implements the v0.32 manifest-based
-// update-check protocol (manifestUrl + server-computed changedAssets) plus the
-// bundle-management CRUD used by the standaloneRepository CLI plugin.
-//
-// storages: [] — our storageUris are already public HTTP(S) URLs (served by
-// this app's /files), so the built-in HTTP resolver returns them directly and
-// reads manifests over HTTP. No cloud storage plugin needed.
 export const hotUpdater = createHotUpdater({
   database: kyselyAdapter({ db: kysely, provider: "postgresql" }),
-  storages: [],
+  storages: [
+    s3Storage({
+      region: "auto",
+      endpoint: config.r2.endpoint,
+      credentials: {
+        accessKeyId: config.r2.accessKeyId,
+        secretAccessKey: config.r2.secretAccessKey,
+      },
+      bucketName: config.r2.bucketName,
+    }),
+  ],
   basePath: config.basePath,
   routes: {
     updateCheck: true,

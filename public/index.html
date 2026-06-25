@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bellissimo Hot Update — Console</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 24px; max-width: 1100px; }
+      h1 { font-size: 20px; }
+      .bar { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+      input, select, button { padding: 8px 10px; font-size: 14px; border-radius: 8px; border: 1px solid #8884; background: transparent; color: inherit; }
+      button { cursor: pointer; }
+      button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      th, td { text-align: left; padding: 8px; border-bottom: 1px solid #8883; vertical-align: top; }
+      code { font-size: 12px; word-break: break-all; }
+      .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; border: 1px solid #8886; }
+      .on { background: #16a34a22; border-color: #16a34a; }
+      .off { background: #dc262622; border-color: #dc2626; }
+      .muted { opacity: .6; }
+      .err { color: #dc2626; }
+    </style>
+  </head>
+  <body>
+    <h1>Bellissimo Hot Update — Console</h1>
+    <div class="bar">
+      <input id="token" type="password" placeholder="Auth token (Bearer)" size="40" />
+      <select id="channel"><option value="">all channels</option></select>
+      <select id="platform">
+        <option value="">all platforms</option>
+        <option value="ios">ios</option>
+        <option value="android">android</option>
+      </select>
+      <button class="primary" id="refresh">Load</button>
+      <span id="status" class="muted"></span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Bundle ID</th><th>Channel</th><th>Platform</th><th>Target / FP</th>
+          <th>Enabled</th><th>Force</th><th>Rollout</th><th>Message</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const tokenInput = $("token");
+      tokenInput.value = localStorage.getItem("hu_token") || "";
+      tokenInput.addEventListener("change", () => localStorage.setItem("hu_token", tokenInput.value));
+
+      const headers = () => ({
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + tokenInput.value,
+      });
+
+      async function api(path, opts = {}) {
+        const res = await fetch(path, { ...opts, headers: { ...headers(), ...(opts.headers || {}) } });
+        if (!res.ok) throw new Error(res.status + " " + res.statusText);
+        return res.status === 204 ? null : res.json();
+      }
+
+      async function loadChannels() {
+        try {
+          const { data } = await api("/hot-updater/api/bundles/channels");
+          const sel = $("channel");
+          const current = sel.value;
+          sel.innerHTML = '<option value="">all channels</option>' +
+            data.channels.map((c) => `<option>${c}</option>`).join("");
+          sel.value = current;
+        } catch (e) { /* ignore until token entered */ }
+      }
+
+      async function load() {
+        $("status").textContent = "Loading…";
+        $("status").className = "muted";
+        try {
+          const params = new URLSearchParams({ limit: "100" });
+          if ($("channel").value) params.set("channel", $("channel").value);
+          if ($("platform").value) params.set("platform", $("platform").value);
+          const result = await api("/hot-updater/api/bundles?" + params.toString());
+          render(result.data);
+          $("status").textContent = `${result.pagination.total} bundle(s)`;
+          loadChannels();
+        } catch (e) {
+          $("status").textContent = "Error: " + e.message;
+          $("status").className = "err";
+        }
+      }
+
+      function render(bundles) {
+        $("rows").innerHTML = bundles.map((b) => {
+          const target = b.targetAppVersion ? `v${b.targetAppVersion}` : (b.fingerprintHash ? b.fingerprintHash.slice(0, 10) + "…" : "—");
+          const rollout = b.rolloutCohortCount == null ? "100%" : (b.rolloutCohortCount / 10) + "%";
+          return `<tr>
+            <td><code>${b.id}</code></td>
+            <td>${b.channel}</td>
+            <td>${b.platform}</td>
+            <td>${target}</td>
+            <td><span class="pill ${b.enabled ? "on" : "off"}">${b.enabled ? "enabled" : "disabled"}</span></td>
+            <td>${b.shouldForceUpdate ? "yes" : "no"}</td>
+            <td>${rollout}</td>
+            <td>${b.message ? String(b.message).slice(0, 40) : ""}</td>
+            <td>
+              <button data-id="${b.id}" data-act="toggle">${b.enabled ? "Disable" : "Enable"}</button>
+              <button data-id="${b.id}" data-act="force">${b.shouldForceUpdate ? "Unforce" : "Force"}</button>
+              <button data-id="${b.id}" data-act="rollout">Rollout %</button>
+              <button data-id="${b.id}" data-act="delete">Delete</button>
+            </td>
+          </tr>`;
+        }).join("");
+
+        document.querySelectorAll("button[data-id]").forEach((btn) => {
+          btn.addEventListener("click", () => act(btn.dataset.id, btn.dataset.act));
+        });
+      }
+
+      async function act(id, action) {
+        try {
+          if (action === "delete") {
+            if (!confirm("Delete bundle " + id + "?")) return;
+            await api("/hot-updater/api/bundles/" + id, { method: "DELETE" });
+          } else {
+            const bundle = await api("/hot-updater/api/bundles/" + id);
+            let patch;
+            if (action === "toggle") {
+              patch = { enabled: !bundle.enabled };
+            } else if (action === "force") {
+              patch = { shouldForceUpdate: !bundle.shouldForceUpdate };
+            } else if (action === "rollout") {
+              const cur = bundle.rolloutCohortCount == null ? 100 : bundle.rolloutCohortCount / 10;
+              const input = prompt("Rollout percentage (0–100) for this bundle:", String(cur));
+              if (input === null) return;
+              const pct = Number(input);
+              if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+                alert("Enter a number between 0 and 100.");
+                return;
+              }
+              // rolloutCohortCount is 0–1000 (1000 = 100%).
+              patch = { rolloutCohortCount: Math.round(pct * 10) };
+            } else {
+              return;
+            }
+            await api("/hot-updater/api/bundles/" + id, { method: "PATCH", body: JSON.stringify(patch) });
+          }
+          load();
+        } catch (e) {
+          alert("Error: " + e.message);
+        }
+      }
+
+      $("refresh").addEventListener("click", load);
+      $("channel").addEventListener("change", load);
+      $("platform").addEventListener("change", load);
+      if (tokenInput.value) load();
+    </script>
+  </body>
+</html>

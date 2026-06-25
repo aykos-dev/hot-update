@@ -1,0 +1,29 @@
+{
+  "name": "bellissimo-hot-update",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Self-hosted, zero-cost OTA update server for React Native, built on @hot-updater/server (Kysely + PostgreSQL) with local-file storage.",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hot-updater/server": "^0.32.0",
+    "express": "^4.21.2",
+    "kysely": "0.28.16",
+    "multer": "^2.0.1",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^20.17.0",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
